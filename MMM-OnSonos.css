@@ -1,0 +1,124 @@
+/*
+ * MMM-OnSonos – Frame with transparency layer for visibility over images.
+ */
+
+:root {
+  --onsonos-font-scale: 1;
+  --onsonos-art-size: 15em;
+  --onsonos-gap: 0.5em;
+  --onsonos-corners: 0.6em;
+  --onsonos-frame-opacity: 0.72;
+  --onsonos-title-color: #fff;
+  --onsonos-subtitle-color: rgba(255, 255, 255, 0.95);
+  --onsonos-device-color: rgba(255, 255, 255, 0.8);
+  --onsonos-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.7);
+  --onsonos-text-shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.MMM-OnSonos.module {
+  display: flex;
+  justify-content: center;
+  font-size: calc(1rem * var(--onsonos-font-scale));
+}
+
+.onsonos {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.onsonos--hidden {
+  display: none !important;
+}
+
+.onsonos--error {
+  padding: 0.5em 1em;
+  color: #fcc;
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: var(--onsonos-corners);
+  text-shadow: var(--onsonos-text-shadow-soft);
+}
+
+.onsonos--playing {
+  max-width: var(--onsonos-art-size);
+}
+
+.onsonos__card {
+  display: flex;
+  flex-flow: column nowrap;
+  align-items: center;
+  gap: 0;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.onsonos__art {
+  width: var(--onsonos-art-size);
+  height: var(--onsonos-art-size);
+  border-radius: var(--onsonos-corners) var(--onsonos-corners) 0 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Single frame: only around the text area, not the album art */
+.onsonos__frame {
+  width: 100%;
+  padding: 0.6em 0.75em 0.75em;
+  background: rgba(0, 0, 0, var(--onsonos-frame-opacity));
+  border-radius: 0 0 var(--onsonos-corners) var(--onsonos-corners);
+  box-sizing: border-box;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.onsonos__card:not(:has(.onsonos__art)) .onsonos__frame {
+  border-radius: var(--onsonos-corners);
+}
+
+.onsonos__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.onsonos__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.14em;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+}
+
+.onsonos__title {
+  font-size: 1.25em;
+  font-weight: bold;
+  color: var(--onsonos-title-color);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  text-shadow: var(--onsonos-text-shadow);
+}
+
+.onsonos__artist {
+  font-size: 0.9em;
+  font-weight: 100;
+  color: var(--onsonos-subtitle-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  text-shadow: var(--onsonos-text-shadow-soft);
+}
+
+.onsonos__device {
+  font-size: 0.8em;
+  color: var(--onsonos-device-color);
+  font-weight: 400;
+  text-shadow: var(--onsonos-text-shadow-soft);
+}
