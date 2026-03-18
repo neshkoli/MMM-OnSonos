@@ -18,11 +18,14 @@ Module.register('MMM-OnSonos', {
     showWhenPaused: false,
     forceHttps: false,
     frameOpacity: 0.72,
+    showDeviceName: true,
     debug: false
   },
 
   start() {
     this.groups = [];
+    this.lastGoodGroups = [];
+    this.lastGoodTimestamp = 0;
     this.error = null;
     this.updateTimer = null;
     this.sendSocketNotification('ONSONOS_CONFIG', this.config);
@@ -47,12 +50,13 @@ Module.register('MMM-OnSonos', {
     switch (notification) {
       case 'ONSONOS_DATA':
         this.groups = payload.groups || [];
+        this.lastGoodGroups = this.groups.slice();
+        this.lastGoodTimestamp = Date.now();
         this.error = null;
         this.updateDom();
         break;
       case 'ONSONOS_ERROR':
         this.error = payload;
-        this.groups = [];
         this.updateDom();
         break;
     }
@@ -70,13 +74,18 @@ Module.register('MMM-OnSonos', {
     const wrapper = document.createElement('div');
     wrapper.className = 'onsonos';
 
-    if (this.error) {
+    const staleThreshold = 5 * this.config.updateInterval;
+    const useStaleData = this.error && this.lastGoodGroups.length > 0 &&
+      (Date.now() - this.lastGoodTimestamp) <= staleThreshold;
+
+    if (this.error && !useStaleData) {
       wrapper.classList.add('onsonos--error');
       wrapper.innerText = `${this.translate('ERROR')}: ${this.error.message || this.error}`;
       return wrapper;
     }
 
-    const playing = (this.groups || []).filter((g) => {
+    const sourceGroups = useStaleData ? this.lastGoodGroups : this.groups;
+    const playing = (sourceGroups || []).filter((g) => {
       const state = (g.playbackState || '').toLowerCase();
       const isPlaying = ['playing', 'transitioning', 'buffering'].includes(state);
       return isPlaying || this.config.showWhenPaused;
@@ -126,7 +135,7 @@ Module.register('MMM-OnSonos', {
       content.appendChild(artist);
     }
 
-    if (group.name) {
+    if (this.config.showDeviceName && group.name) {
       const device = document.createElement('div');
       device.className = 'onsonos__device';
       device.textContent = group.name;
