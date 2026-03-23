@@ -1,0 +1,49 @@
+diff --git a/node_modules/sonos/lib/events/adv-listener.js b/node_modules/sonos/lib/events/adv-listener.js
+index aa1da72..208108a 100644
+--- a/node_modules/sonos/lib/events/adv-listener.js
++++ b/node_modules/sonos/lib/events/adv-listener.js
+@@ -10,11 +10,42 @@ const EventEmitter = require('events').EventEmitter
+ const request = require('axios')
+ const debug = require('debug')('sonos-listener')
+ const http = require('http')
+-const ip = require('ip')
++const os = require('os')
+ const parseXml = require('../helpers').ParseXml
+ const ParseAndEmitEvents = require('./eventParser').ParseAndEmitEvents
+ 
+-const listenAddress = process.env.SONOS_LISTENER || ip.address('public')
++/**
++ * Equivalent to node-ip's ip.address('public'): first private IPv4 on a LAN interface.
++ * Avoids the `ip` package (npm audit: GHSA-2p57-rm9w-gvfp).
++ */
++function sonosListenIPv4 () {
++  const ifaces = os.networkInterfaces()
++  for (const name of Object.keys(ifaces)) {
++    for (const details of ifaces[name]) {
++      const fam = details.family === 'IPv4' || details.family === 4 ? 'ipv4' : 'ipv6'
++      if (fam !== 'ipv4') continue
++      const addr = details.address
++      if (addr.startsWith('127.')) continue
++      if (addr.startsWith('10.')) return addr
++      if (addr.startsWith('192.168.')) return addr
++      const m = /^172\.(\d+)\./.exec(addr)
++      if (m) {
++        const n = parseInt(m[1], 10)
++        if (n >= 16 && n <= 31) return addr
++      }
++    }
++  }
++  for (const name of Object.keys(ifaces)) {
++    for (const details of ifaces[name]) {
++      if ((details.family === 'IPv4' || details.family === 4) && !details.internal && !details.address.startsWith('127.')) {
++        return details.address
++      }
++    }
++  }
++  return '0.0.0.0'
++}
++
++const listenAddress = process.env.SONOS_LISTENER || sonosListenIPv4()
+ 
+ const globalEventEndpoints = [
+   '/AlarmClock/Event',

@@ -18,8 +18,8 @@
   },
   "overrides": {
     "axios": "^1.13.1",
-    "ip": "^2.0.1",
-    "xml2js": "^0.6.2"
+    "xml2js": "^0.6.2",
+    "ip": "file:./vendor/ip-shim"
   },
   "devDependencies": {
     "patch-package": "^8.0.1"

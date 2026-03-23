@@ -1,0 +1,7 @@
+{
+  "name": "ip",
+  "version": "2.0.0-local",
+  "description": "Local shim to replace npm ip (GHSA-2p57-rm9w-gvfp); MMM-OnSonos patches sonos to not use this at runtime.",
+  "main": "index.js",
+  "license": "MIT"
+}
