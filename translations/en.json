@@ -1,4 +1,5 @@
 {
   "ERROR": "Error",
-  "UNKNOWN_TRACK": "Unknown track"
+  "UNKNOWN_TRACK": "Unknown track",
+  "TIME_UNKNOWN": "—"
 }

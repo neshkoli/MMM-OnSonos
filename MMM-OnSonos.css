@@ -31,15 +31,6 @@
   display: none !important;
 }
 
-.onsonos--error {
-  padding: 0.5em 1em;
-  color: #fcc;
-  font-size: 0.9em;
-  background: rgba(0, 0, 0, 0.75);
-  border-radius: var(--onsonos-corners);
-  text-shadow: var(--onsonos-text-shadow-soft);
-}
-
 .onsonos--playing {
   max-width: var(--onsonos-art-size);
 }
@@ -63,10 +54,10 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* Single frame: only around the text area, not the album art */
+/* Single frame: text area + playback row; album art sits above */
 .onsonos__frame {
   width: 100%;
-  padding: 0.6em 0.75em 0.75em;
+  padding: 0;
   background: rgba(0, 0, 0, var(--onsonos-frame-opacity));
   border-radius: 0 0 var(--onsonos-corners) var(--onsonos-corners);
   box-sizing: border-box;
@@ -75,6 +66,73 @@
 
 .onsonos__card:not(:has(.onsonos__art)) .onsonos__frame {
   border-radius: var(--onsonos-corners);
+}
+
+.onsonos__playback {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.onsonos__progress {
+  height: 3px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.onsonos__progress-fill {
+  height: 100%;
+  width: 0%;
+  background: rgba(245, 240, 230, 0.92);
+  transition: width 0.12s linear;
+}
+
+.onsonos__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.28em 0.65em 0.18em;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--onsonos-title-color);
+  text-shadow: var(--onsonos-text-shadow-soft);
+}
+
+.onsonos__meta--time-only {
+  justify-content: flex-end;
+}
+
+.onsonos__meta-device-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+  flex: 1;
+}
+
+.onsonos__speaker-icon {
+  width: 0.9em;
+  height: 1.2em;
+  flex-shrink: 0;
+  color: #fff;
+  display: block;
+}
+
+.onsonos__meta-device {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.onsonos__meta-time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .onsonos__art img {
@@ -87,17 +145,22 @@
 .onsonos__content {
   display: flex;
   flex-direction: column;
-  gap: 0.14em;
+  gap: 0.06em;
   align-items: center;
   min-width: 0;
   width: 100%;
+  padding: 0.35em 0.65em 0.45em;
+}
+
+.onsonos__playback + .onsonos__content {
+  padding-top: 0.1em;
 }
 
 .onsonos__title {
   font-size: 1.25em;
   font-weight: bold;
   color: var(--onsonos-title-color);
-  line-height: 1.2;
+  line-height: 1.12;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -116,9 +179,3 @@
   text-shadow: var(--onsonos-text-shadow-soft);
 }
 
-.onsonos__device {
-  font-size: 0.8em;
-  color: var(--onsonos-device-color);
-  font-weight: 400;
-  text-shadow: var(--onsonos-text-shadow-soft);
-}

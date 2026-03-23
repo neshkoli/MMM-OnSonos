@@ -14,7 +14,6 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "better-npm-audit": "^3.11.0",
     "sonos": "^1.14.1"
   },
   "overrides": {

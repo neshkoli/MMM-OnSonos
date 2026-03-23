@@ -14,7 +14,7 @@ module.exports = NodeHelper.create({
     const fallback = this._readConfigFromFile();
     if (fallback) {
       this._configure(fallback).catch((err) => {
-        this.sendError('Failed to start MMM-OnSonos with fallback config', err);
+        this._logError('Failed to start MMM-OnSonos with fallback config', err);
       });
     }
   },
@@ -37,7 +37,7 @@ module.exports = NodeHelper.create({
   async _configure(config) {
     this.config = Object.assign(
       {
-        updateInterval: 15 * 1000,
+        updateInterval: 5 * 1000,
         discoveryTimeout: 5 * 1000,
         hiddenSpeakers: [],
         hiddenGroups: [],
@@ -74,7 +74,7 @@ module.exports = NodeHelper.create({
         }
       }
     } catch (err) {
-      this.sendError('Discovery failed', err);
+      this._logError('Discovery failed', err);
     }
 
     if (!this.coordinator && Array.isArray(this.config.knownDevices)) {
@@ -102,8 +102,7 @@ module.exports = NodeHelper.create({
       const formatted = await this._mapGroups(groups);
       this.sendSocketNotification('ONSONOS_DATA', { groups: formatted, timestamp: Date.now() });
     } catch (err) {
-      this.sendError('Failed to fetch Sonos data', err);
-      this.coordinator = null;
+      this._logError('Failed to fetch Sonos data', err);
     }
   },
 
@@ -156,6 +155,7 @@ module.exports = NodeHelper.create({
         const track = await coordinator.currentTrack();
         const albumArt = this._normalizeArt(track?.albumArtURL || track?.absoluteAlbumArtURI, coordinator);
         const coordinatorName = await this._coordinatorName(coordinator);
+        const { positionSec, durationSec } = this._normalizePlayback(track);
 
         result.push({
           id: id || coordinator.uuid || coordinator.host,
@@ -165,6 +165,8 @@ module.exports = NodeHelper.create({
           artist: track?.artist || null,
           album: track?.album || null,
           albumArt,
+          positionSec,
+          durationSec,
           members: members.length ? members : [coordinatorName || name || 'Sonos']
         });
       } catch (_) {}
@@ -197,6 +199,32 @@ module.exports = NodeHelper.create({
     }
   },
 
+  /**
+   * Sonos GetPositionInfo: duration may be 0 for live/radio; position may be missing.
+   * @returns {{ positionSec: number|null, durationSec: number|null }}
+   */
+  _normalizePlayback(track) {
+    if (!track || typeof track !== 'object') {
+      return { positionSec: null, durationSec: null };
+    }
+    const rawPos = track.position;
+    const rawDur = track.duration;
+    let positionSec = null;
+    let durationSec = null;
+    if (rawPos !== undefined && rawPos !== null && rawPos !== '') {
+      const p = Number(rawPos);
+      if (Number.isFinite(p) && p >= 0) positionSec = p;
+    }
+    if (rawDur !== undefined && rawDur !== null && rawDur !== '') {
+      const d = Number(rawDur);
+      if (Number.isFinite(d) && d > 0) durationSec = d;
+    }
+    if (positionSec != null && durationSec != null && positionSec > durationSec) {
+      positionSec = durationSec;
+    }
+    return { positionSec, durationSec };
+  },
+
   _normalizeArt(uri, coordinator) {
     if (!uri || typeof uri !== 'string') return null;
     if (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('data:')) return uri;
@@ -219,10 +247,12 @@ module.exports = NodeHelper.create({
     }
   },
 
-  sendError(context, err) {
-    this.sendSocketNotification('ONSONOS_ERROR', {
-      context,
-      message: err?.message || err || 'Unknown error'
-    });
+  /**
+   * Logs only when config.debug is true. Does not notify the browser (no error overlay).
+   */
+  _logError(context, err) {
+    if (!this.config.debug) return;
+    const msg = err?.message || err || 'Unknown error';
+    console.warn(`[MMM-OnSonos] ${context}:`, msg);
   }
 });

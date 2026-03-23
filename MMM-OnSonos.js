@@ -6,7 +6,7 @@
  */
 Module.register('MMM-OnSonos', {
   defaults: {
-    updateInterval: 15 * 1000,
+    updateInterval: 5 * 1000,
     discoveryTimeout: 5 * 1000,
     hiddenSpeakers: [],
     hiddenGroups: [],
@@ -19,23 +19,39 @@ Module.register('MMM-OnSonos', {
     forceHttps: false,
     frameOpacity: 0.72,
     showDeviceName: true,
+    showProgressBar: true,
     debug: false
   },
 
   start() {
     this.groups = [];
-    this.lastGoodGroups = [];
     this.lastGoodTimestamp = 0;
-    this.error = null;
     this.updateTimer = null;
+    this._playbackSync = null;
+    this._playbackUiRefs = null;
+    this._playbackTickTimer = null;
     this.sendSocketNotification('ONSONOS_CONFIG', this.config);
     this.scheduleRefresh();
+    this._startPlaybackClock();
   },
 
   stop() {
     if (this.updateTimer) {
       clearInterval(this.updateTimer);
       this.updateTimer = null;
+    }
+    this._stopPlaybackClock();
+  },
+
+  _startPlaybackClock() {
+    this._stopPlaybackClock();
+    this._playbackTickTimer = setInterval(() => this._refreshPlaybackUI(), 1000);
+  },
+
+  _stopPlaybackClock() {
+    if (this._playbackTickTimer) {
+      clearInterval(this._playbackTickTimer);
+      this._playbackTickTimer = null;
     }
   },
 
@@ -50,13 +66,7 @@ Module.register('MMM-OnSonos', {
     switch (notification) {
       case 'ONSONOS_DATA':
         this.groups = payload.groups || [];
-        this.lastGoodGroups = this.groups.slice();
         this.lastGoodTimestamp = Date.now();
-        this.error = null;
-        this.updateDom();
-        break;
-      case 'ONSONOS_ERROR':
-        this.error = payload;
         this.updateDom();
         break;
     }
@@ -74,17 +84,7 @@ Module.register('MMM-OnSonos', {
     const wrapper = document.createElement('div');
     wrapper.className = 'onsonos';
 
-    const staleThreshold = 5 * this.config.updateInterval;
-    const useStaleData = this.error && this.lastGoodGroups.length > 0 &&
-      (Date.now() - this.lastGoodTimestamp) <= staleThreshold;
-
-    if (this.error && !useStaleData) {
-      wrapper.classList.add('onsonos--error');
-      wrapper.innerText = `${this.translate('ERROR')}: ${this.error.message || this.error}`;
-      return wrapper;
-    }
-
-    const sourceGroups = useStaleData ? this.lastGoodGroups : this.groups;
+    const sourceGroups = this.groups;
     const playing = (sourceGroups || []).filter((g) => {
       const state = (g.playbackState || '').toLowerCase();
       const isPlaying = ['playing', 'transitioning', 'buffering'].includes(state);
@@ -92,11 +92,15 @@ Module.register('MMM-OnSonos', {
     });
 
     if (!playing.length) {
+      this._playbackSync = null;
+      this._playbackUiRefs = null;
       wrapper.classList.add('onsonos--hidden');
       return wrapper;
     }
 
     const group = playing[0];
+    const syncAtMs = this.lastGoodTimestamp || Date.now();
+    this._playbackSync = this._snapshotFromGroup(group, syncAtMs);
     wrapper.classList.add('onsonos--playing');
     wrapper.style.setProperty('--onsonos-art-size', this._normalizeSize(this.config.albumArtSize));
     wrapper.style.setProperty('--onsonos-font-scale', String(this.config.fontScale));
@@ -120,6 +124,10 @@ Module.register('MMM-OnSonos', {
     const frame = document.createElement('div');
     frame.className = 'onsonos__frame';
 
+    const built = this._buildPlaybackSection(group);
+    frame.appendChild(built.section);
+    this._playbackUiRefs = built.refs;
+
     const content = document.createElement('div');
     content.className = 'onsonos__content';
 
@@ -135,17 +143,39 @@ Module.register('MMM-OnSonos', {
       content.appendChild(artist);
     }
 
-    if (this.config.showDeviceName && group.name) {
-      const device = document.createElement('div');
-      device.className = 'onsonos__device';
-      device.textContent = group.name;
-      content.appendChild(device);
-    }
-
     frame.appendChild(content);
     card.appendChild(frame);
     wrapper.appendChild(card);
+    this._refreshPlaybackUI();
     return wrapper;
+  },
+
+  /**
+   * Bookshelf / studio monitor: rounded cabinet, smaller tweeter + larger woofer (cutouts).
+   * Filled white (#fff via CSS); holes show the panel behind.
+   * @returns {SVGElement}
+   */
+  _createSpeakerIconSvg() {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 32');
+    svg.setAttribute('class', 'onsonos__speaker-icon');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('fill', 'currentColor');
+    path.setAttribute('fill-rule', 'evenodd');
+    path.setAttribute(
+      'd',
+      [
+        'M 9 3 H 15 Q 18 3 18 6 V 26 Q 18 29 15 29 H 9 Q 6 29 6 26 V 6 Q 6 3 9 3 Z',
+        'M 12 10.5 m -2.5 0 a 2.5 2.5 0 1 1 5 0 a 2.5 2.5 0 1 1 -5 0',
+        'M 12 20.5 m -3.5 0 a 3.5 3.5 0 1 1 7 0 a 3.5 3.5 0 1 1 -7 0'
+      ].join(' ')
+    );
+    svg.appendChild(path);
+    return svg;
   },
 
   _normalizeSize(value) {
@@ -153,5 +183,156 @@ Module.register('MMM-OnSonos', {
     if (typeof value === 'number') return `${value}px`;
     if (typeof value === 'string' && /^\d*\.?\d+(px|rem|em|vw|vh|%)?$/i.test(value.trim())) return value.trim();
     return '15em';
+  },
+
+  /**
+   * Progress bar + device / time row (under album art, top of frame).
+   * @returns {{ section: HTMLElement, refs: { timeEl: HTMLElement, fillEl: HTMLElement|null, barEl: HTMLElement|null } }}
+   */
+  _buildPlaybackSection(group) {
+    const disp = this._computeInterpolatedPlayback();
+    const showBar = this.config.showProgressBar !== false;
+    const dur = disp.durationSec;
+    const pos = disp.positionSec;
+    const hasDuration = dur != null && Number.isFinite(dur) && dur > 0;
+    const hasPosition = pos != null && Number.isFinite(pos) && pos >= 0;
+    const showProgressTrack = showBar && hasDuration;
+
+    const section = document.createElement('div');
+    section.className = 'onsonos__playback';
+
+    let barEl = null;
+    let fillEl = null;
+    if (showProgressTrack) {
+      barEl = document.createElement('div');
+      barEl.className = 'onsonos__progress';
+      barEl.setAttribute('role', 'progressbar');
+      barEl.setAttribute('aria-valuemin', '0');
+      barEl.setAttribute('aria-valuemax', '100');
+      fillEl = document.createElement('div');
+      fillEl.className = 'onsonos__progress-fill';
+      let pct = 0;
+      if (hasPosition) {
+        pct = Math.min(100, Math.max(0, (pos / dur) * 100));
+      }
+      fillEl.style.width = `${pct}%`;
+      barEl.setAttribute('aria-valuenow', String(Math.round(pct)));
+      barEl.appendChild(fillEl);
+      section.appendChild(barEl);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'onsonos__meta';
+
+    if (this.config.showDeviceName && group.name) {
+      const wrap = document.createElement('span');
+      wrap.className = 'onsonos__meta-device-wrap';
+      wrap.appendChild(this._createSpeakerIconSvg());
+      const device = document.createElement('span');
+      device.className = 'onsonos__meta-device';
+      device.textContent = group.name;
+      wrap.appendChild(device);
+      meta.appendChild(wrap);
+    } else {
+      meta.classList.add('onsonos__meta--time-only');
+    }
+
+    const timeEl = document.createElement('span');
+    timeEl.className = 'onsonos__meta-time';
+    timeEl.textContent = this._formatPlaybackLabelFromValues(disp.positionSec, disp.durationSec);
+    meta.appendChild(timeEl);
+
+    section.appendChild(meta);
+    return { section, refs: { timeEl, fillEl, barEl } };
+  },
+
+  _snapshotFromGroup(group, syncAtMs) {
+    return {
+      positionSec: group.positionSec,
+      durationSec: group.durationSec,
+      playbackState: group.playbackState || '',
+      syncAtMs: syncAtMs || Date.now()
+    };
+  },
+
+  /**
+   * Advances position between API polls while playing; freezes when paused.
+   * @returns {{ positionSec: number|null, durationSec: number|null }}
+   */
+  _computeInterpolatedPlayback() {
+    const s = this._playbackSync;
+    if (!s) {
+      return { positionSec: null, durationSec: null };
+    }
+    const state = (s.playbackState || '').toLowerCase();
+    const isAdvancing = ['playing', 'transitioning', 'buffering'].includes(state);
+
+    let pos = s.positionSec;
+    if (pos != null && Number.isFinite(pos) && pos >= 0) {
+      /* keep */
+    } else {
+      pos = null;
+    }
+
+    if (!isAdvancing) {
+      return { positionSec: pos, durationSec: s.durationSec };
+    }
+
+    let elapsed = (Date.now() - s.syncAtMs) / 1000;
+    if (!Number.isFinite(elapsed) || elapsed < 0) elapsed = 0;
+
+    let next = pos != null ? pos + elapsed : null;
+    const dur = s.durationSec;
+    if (next != null && Number.isFinite(next)) {
+      if (dur != null && Number.isFinite(dur) && dur > 0) {
+        next = Math.min(dur, Math.max(0, next));
+      } else if (next < 0) {
+        next = 0;
+      }
+    }
+
+    return { positionSec: next, durationSec: s.durationSec };
+  },
+
+  _refreshPlaybackUI() {
+    const refs = this._playbackUiRefs;
+    if (!refs || !refs.timeEl || !this._playbackSync) return;
+
+    const disp = this._computeInterpolatedPlayback();
+    refs.timeEl.textContent = this._formatPlaybackLabelFromValues(disp.positionSec, disp.durationSec);
+
+    if (refs.fillEl) {
+      const dur = disp.durationSec;
+      const pos = disp.positionSec;
+      if (dur != null && Number.isFinite(dur) && dur > 0 && pos != null && Number.isFinite(pos)) {
+        const pct = Math.min(100, Math.max(0, (pos / dur) * 100));
+        refs.fillEl.style.width = `${pct}%`;
+        if (refs.barEl) {
+          refs.barEl.setAttribute('aria-valuenow', String(Math.round(pct)));
+        }
+      }
+    }
+  },
+
+  _formatPlaybackLabelFromValues(positionSec, durationSec) {
+    const unknown = this.translate('TIME_UNKNOWN');
+    const left = this._formatClock(positionSec);
+    const right = this._formatClock(durationSec);
+    if (!left && !right) return `${unknown} / ${unknown}`;
+    if (left && !right) return `${left} / ${unknown}`;
+    if (!left && right) return `${unknown} / ${right}`;
+    return `${left} / ${right}`;
+  },
+
+  _formatClock(seconds) {
+    if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
+    const s = Math.floor(seconds);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) {
+      return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    }
+    return `${m}:${String(sec).padStart(2, '0')}`;
   }
 });
