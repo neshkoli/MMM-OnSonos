@@ -20,6 +20,10 @@ Module.register('MMM-OnSonos', {
     frameOpacity: 0.72,
     showDeviceName: true,
     showProgressBar: true,
+    /** 'above' = title/artist over album art (default); 'below' = legacy layout under art */
+    displayMode: 'above',
+    /** 'glowBlue' (default) or 'classic' (warm neutral bar) */
+    progressBarStyle: 'glowBlue',
     debug: false
   },
 
@@ -102,6 +106,14 @@ Module.register('MMM-OnSonos', {
     const syncAtMs = this.lastGoodTimestamp || Date.now();
     this._playbackSync = this._snapshotFromGroup(group, syncAtMs);
     wrapper.classList.add('onsonos--playing');
+    const textAbove = String(this.config.displayMode || 'above').toLowerCase() !== 'below';
+    wrapper.classList.add(textAbove ? 'onsonos--text-above' : 'onsonos--text-below');
+    if (String(this.config.progressBarStyle || 'glowBlue').toLowerCase() === 'classic') {
+      wrapper.classList.add('onsonos--progress-classic');
+    } else {
+      wrapper.classList.add('onsonos--progress-glow');
+    }
+
     wrapper.style.setProperty('--onsonos-art-size', this._normalizeSize(this.config.albumArtSize));
     wrapper.style.setProperty('--onsonos-font-scale', String(this.config.fontScale));
     wrapper.style.setProperty('--onsonos-frame-opacity', String(this.config.frameOpacity ?? 0.72));
@@ -110,30 +122,70 @@ Module.register('MMM-OnSonos', {
     const card = document.createElement('div');
     card.className = 'onsonos__card';
 
-    if (group.albumArt) {
-      const art = document.createElement('div');
-      art.className = 'onsonos__art';
-      const img = document.createElement('img');
-      img.loading = 'lazy';
-      img.src = group.albumArt;
-      img.alt = (group.title || '').trim() || 'Album art';
-      art.appendChild(img);
-      card.appendChild(art);
+    const content = this._buildTrackContent(group);
+
+    if (textAbove) {
+      const frameTop = document.createElement('div');
+      frameTop.className = 'onsonos__frame onsonos__frame--top';
+      frameTop.appendChild(content);
+      card.appendChild(frameTop);
+
+      if (group.albumArt) {
+        const art = document.createElement('div');
+        art.className = 'onsonos__art';
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.src = group.albumArt;
+        img.alt = (group.title || '').trim() || 'Album art';
+        art.appendChild(img);
+        card.appendChild(art);
+      }
+
+      const frameBottom = document.createElement('div');
+      frameBottom.className = 'onsonos__frame onsonos__frame--bottom';
+      const built = this._buildPlaybackSection(group);
+      frameBottom.appendChild(built.section);
+      this._playbackUiRefs = built.refs;
+      card.appendChild(frameBottom);
+    } else {
+      if (group.albumArt) {
+        const art = document.createElement('div');
+        art.className = 'onsonos__art';
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.src = group.albumArt;
+        img.alt = (group.title || '').trim() || 'Album art';
+        art.appendChild(img);
+        card.appendChild(art);
+      }
+
+      const frame = document.createElement('div');
+      frame.className = 'onsonos__frame';
+      const built = this._buildPlaybackSection(group);
+      frame.appendChild(built.section);
+      this._playbackUiRefs = built.refs;
+      frame.appendChild(content);
+      card.appendChild(frame);
     }
 
-    const frame = document.createElement('div');
-    frame.className = 'onsonos__frame';
+    wrapper.appendChild(card);
+    this._refreshPlaybackUI();
+    return wrapper;
+  },
 
-    const built = this._buildPlaybackSection(group);
-    frame.appendChild(built.section);
-    this._playbackUiRefs = built.refs;
-
+  _buildTrackContent(group) {
     const content = document.createElement('div');
     content.className = 'onsonos__content';
 
     const title = document.createElement('div');
     title.className = 'onsonos__title';
-    title.textContent = group.title || this.translate('UNKNOWN_TRACK');
+    const titleText = group.title || this.translate('UNKNOWN_TRACK');
+    title.textContent = titleText;
+    const titleLen = titleText.length;
+    if (titleLen > 25) {
+      const scale = Math.max(0.62, 1 - (titleLen - 25) * 0.014);
+      title.style.setProperty('--onsonos-title-scale', String(scale));
+    }
     content.appendChild(title);
 
     if (group.artist) {
@@ -143,11 +195,7 @@ Module.register('MMM-OnSonos', {
       content.appendChild(artist);
     }
 
-    frame.appendChild(content);
-    card.appendChild(frame);
-    wrapper.appendChild(card);
-    this._refreshPlaybackUI();
-    return wrapper;
+    return content;
   },
 
   /**

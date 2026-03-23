@@ -33,6 +33,8 @@
 
 .onsonos--playing {
   max-width: var(--onsonos-art-size);
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .onsonos__card {
@@ -42,7 +44,9 @@
   gap: 0;
   text-align: center;
   width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .onsonos__art {
@@ -54,18 +58,47 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* Single frame: text area + playback row; album art sits above */
+.onsonos--text-above .onsonos__art {
+  border-radius: 0;
+}
+
+/* Frame panels (below mode: one block under art; above mode: top = text, bottom = playback) */
 .onsonos__frame {
   width: 100%;
+  max-width: 100%;
   padding: 0;
   background: rgba(0, 0, 0, var(--onsonos-frame-opacity));
   border-radius: 0 0 var(--onsonos-corners) var(--onsonos-corners);
   box-sizing: border-box;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  overflow-x: hidden;
 }
 
-.onsonos__card:not(:has(.onsonos__art)) .onsonos__frame {
+.onsonos--text-above .onsonos__frame--top {
+  border-radius: var(--onsonos-corners) var(--onsonos-corners) 0 0;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.28);
+}
+
+.onsonos--text-above .onsonos__frame--bottom {
+  border-radius: 0 0 var(--onsonos-corners) var(--onsonos-corners);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.onsonos--progress-glow .onsonos__frame--bottom,
+.onsonos--progress-glow.onsonos--text-below .onsonos__frame {
+  overflow: visible;
+}
+
+.onsonos--text-below .onsonos__card:not(:has(.onsonos__art)) .onsonos__frame {
   border-radius: var(--onsonos-corners);
+}
+
+.onsonos--text-above .onsonos__card:not(:has(.onsonos__art)) .onsonos__frame--top {
+  border-radius: var(--onsonos-corners) var(--onsonos-corners) 0 0;
+}
+
+.onsonos--text-above .onsonos__card:not(:has(.onsonos__art)) .onsonos__frame--bottom {
+  border-radius: 0 0 var(--onsonos-corners) var(--onsonos-corners);
 }
 
 .onsonos__playback {
@@ -78,6 +111,7 @@
   width: 100%;
   background: rgba(255, 255, 255, 0.12);
   overflow: hidden;
+  border-radius: 2px;
 }
 
 .onsonos__progress-fill {
@@ -85,6 +119,47 @@
   width: 0%;
   background: rgba(245, 240, 230, 0.92);
   transition: width 0.12s linear;
+  border-radius: inherit;
+}
+
+/* Glow blue progress (default) */
+.onsonos--progress-glow .onsonos__playback {
+  padding: 5px 0 2px;
+}
+
+.onsonos--progress-glow .onsonos__progress {
+  height: 4px;
+  overflow: visible;
+  background: rgba(12, 28, 56, 0.65);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 10px rgba(0, 0, 0, 0.45),
+    0 0 1px rgba(120, 200, 255, 0.35);
+}
+
+.onsonos--progress-glow .onsonos__progress-fill {
+  background: linear-gradient(90deg, #4da3ff 0%, #7aebff 55%, #a8f0ff 100%);
+  box-shadow:
+    0 0 8px 1px rgba(100, 200, 255, 0.95),
+    0 0 16px 3px rgba(60, 150, 255, 0.45);
+  border-radius: 4px;
+}
+
+.onsonos--progress-classic .onsonos__playback {
+  padding: 0;
+}
+
+.onsonos--progress-classic .onsonos__progress {
+  height: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.onsonos--progress-classic .onsonos__progress-fill {
+  background: rgba(245, 240, 230, 0.92);
+  box-shadow: none;
 }
 
 .onsonos__meta {
@@ -152,12 +227,16 @@
   padding: 0.35em 0.65em 0.45em;
 }
 
-.onsonos__playback + .onsonos__content {
+.onsonos__frame--top .onsonos__content {
+  padding: 0.42em 0.65em 0.38em;
+}
+
+.onsonos--text-below .onsonos__playback + .onsonos__content {
   padding-top: 0.1em;
 }
 
 .onsonos__title {
-  font-size: 1.25em;
+  font-size: calc(1.25em * var(--onsonos-title-scale, 1));
   font-weight: bold;
   color: var(--onsonos-title-color);
   line-height: 1.12;
@@ -165,6 +244,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
   text-shadow: var(--onsonos-text-shadow);
 }
 
@@ -176,6 +257,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
   text-shadow: var(--onsonos-text-shadow-soft);
 }
 
