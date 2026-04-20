@@ -1,7 +1,7 @@
 'use strict';
 
 const NodeHelper = require('node_helper');
-const { AsyncDeviceDiscovery, Sonos } = require('sonos');
+const { AsyncDeviceDiscovery, Sonos, Helpers } = require('sonos');
 const path = require('node:path');
 
 module.exports = NodeHelper.create({
@@ -153,7 +153,7 @@ module.exports = NodeHelper.create({
         if (state !== 'playing' && !this.config.showWhenPaused) continue;
 
         const track = await coordinator.currentTrack();
-        const albumArt = this._normalizeArt(track?.albumArtURL || track?.absoluteAlbumArtURI, coordinator);
+        const albumArt = await this._resolveDisplayArt(track, coordinator);
         const coordinatorName = await this._coordinatorName(coordinator);
         const { positionSec, durationSec } = this._normalizePlayback(track);
 
@@ -233,6 +233,76 @@ module.exports = NodeHelper.create({
     const port = coordinator?.port || 1400;
     if (!host) return uri;
     return `${proto}://${host}:${port}${uri.startsWith('/') ? uri : '/' + uri}`;
+  },
+
+  /**
+   * Track metadata (GetPositionInfo) often has no cover for radio / live streams.
+   * Station or stream artwork is frequently only present on the transport URI (GetMediaInfo).
+   * @param {object|null} track from Sonos.currentTrack()
+   * @param {object} coordinator Sonos device
+   * @returns {Promise<string|null>}
+   */
+  async _resolveDisplayArt(track, coordinator) {
+    const primaryRaw =
+      track?.albumArtURL || track?.absoluteAlbumArtURI || track?.albumArtURI || null;
+    const primary = this._normalizeArt(primaryRaw, coordinator);
+    if (primary) return primary;
+
+    return this._albumArtFromDidlString(
+      (await this._safeGetMediaInfo(coordinator))?.CurrentURIMetaData,
+      coordinator
+    );
+  },
+
+  async _safeGetMediaInfo(coordinator) {
+    if (!coordinator || typeof coordinator.avTransportService !== 'function') return null;
+    try {
+      return await coordinator.avTransportService().GetMediaInfo();
+    } catch (err) {
+      this._logError('GetMediaInfo failed', err);
+      return null;
+    }
+  },
+
+  /**
+   * @param {string|null|undefined} raw DIDL-Lite XML
+   * @param {object} coordinator Sonos device
+   * @returns {Promise<string|null>}
+   */
+  async _albumArtFromDidlString(raw, coordinator) {
+    if (!raw || typeof raw !== 'string' || raw === 'NOT_IMPLEMENTED') return null;
+    try {
+      const parsed = await Helpers.ParseXml(raw);
+      return this._firstAlbumArtFromParsedDidl(parsed, coordinator);
+    } catch (err) {
+      this._logError('DIDL parse failed (GetMediaInfo CurrentURIMetaData)', err);
+      return null;
+    }
+  },
+
+  /**
+   * @param {object} parsed result of Helpers.ParseXml on DIDL
+   * @param {object} coordinator Sonos device
+   * @returns {string|null}
+   */
+  _firstAlbumArtFromParsedDidl(parsed, coordinator) {
+    const lite = parsed && parsed['DIDL-Lite'];
+    if (!lite) return null;
+    let items = lite.item;
+    if (!items) return null;
+    if (!Array.isArray(items)) items = [items];
+    const host = coordinator?.host;
+    const port = coordinator?.port || 1400;
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const t = Helpers.ParseDIDLItem(item, host, port);
+      const uri = t && t.albumArtURI;
+      if (uri) {
+        const normalized = this._normalizeArt(uri, coordinator);
+        if (normalized) return normalized;
+      }
+    }
+    return null;
   },
 
   _readConfigFromFile() {
